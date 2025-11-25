@@ -1,0 +1,13 @@
+{
+  "lose": {
+    "sounds": [
+      "casinohelper:lose"
+    ]
+  },
+  "new_bet": {
+    "sounds": [
+      "casinohelper:new_bet"
+    ]
+  }
+}
+

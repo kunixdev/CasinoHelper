@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "casinohelper",
+  "version": "${version}",
+  "name": "Casino Helper",
+  "description": "A casino helper mod",
+  "authors": [
+    "Kunix"
+  ],
+  "contact": {},
+  "license": "CC0-1.0",
+  "icon": "assets/casinohelper/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.casinohelper.CasinoHelperMod"
+    ],
+    "client": [
+      "com.casinohelper.CasinoHelperClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.9",
+    "minecraft": "~1.21.4",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
