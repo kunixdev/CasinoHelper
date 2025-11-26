@@ -16,10 +16,8 @@ public class CasinoConfig {
     public static int y = 10;
     public static float scale = 1.0f;
     public static boolean hudVisible = true;
-    public static String donutApiKey = "";
     public static String dashboardApiKey = "";
     public static float backgroundOpacity = 0.67f; // 0 (transparent) to 1 (opaque)
-    public static boolean copyCommandWithSlash = false;
     public static boolean soundEnabled = true;
 
     // Betting Limits
@@ -43,10 +41,6 @@ public class CasinoConfig {
     // Wagered)
     // Positive means they are winning against casino.
     public static Map<String, Double> playerNetProfit = new HashMap<>();
-
-    // Custom Multipliers
-    public static java.util.List<Integer> multipliers = new java.util.ArrayList<>(
-            java.util.Arrays.asList(2, 3, 4, 6, 12));
 
     private static final File CONFIG_FILE = FabricLoader.getInstance().getConfigDir().resolve("casinohelper.json")
             .toFile();
@@ -85,9 +79,9 @@ public class CasinoConfig {
 
     public static void save() {
         try (FileWriter writer = new FileWriter(CONFIG_FILE)) {
-            GSON.toJson(new ConfigData(x, y, scale, hudVisible, donutApiKey, dashboardApiKey, backgroundOpacity,
-                    copyCommandWithSlash, soundEnabled, minBet, maxBet, totalVolume, netProfit, wins, losses, playerTotalWagered,
-                    playerNetProfit, multipliers), writer);
+            GSON.toJson(new ConfigData(x, y, scale, hudVisible, dashboardApiKey, backgroundOpacity,
+                    soundEnabled, minBet, maxBet, totalVolume, netProfit, wins, losses, playerTotalWagered,
+                    playerNetProfit), writer);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -104,18 +98,6 @@ public class CasinoConfig {
                 y = data.y;
                 scale = data.scale;
                 hudVisible = data.hudVisible;
-                if (data.donutApiKey != null)
-                    donutApiKey = data.donutApiKey;
-                // Support migration: if apiKey existed (old config), map it to donutApiKey?
-                // Or just ignore. The user said "old mod has the donut smp api key".
-                // If the JSON has "apiKey", GSON won't map it to "donutApiKey" automatically
-                // unless we use @SerializedName or custom logic.
-                // But since we control the class, we can just add a field for migration or let
-                // the user re-enter it.
-                // However, the user specifically mentioned needing the old key.
-                // Let's add a temporary field to ConfigData to catch it.
-                if (data.apiKey != null && (donutApiKey == null || donutApiKey.isEmpty()))
-                    donutApiKey = data.apiKey;
 
                 if (data.dashboardApiKey != null)
                     dashboardApiKey = data.dashboardApiKey;
@@ -126,7 +108,6 @@ public class CasinoConfig {
                 soundEnabled = data.soundEnabled;
                 backgroundOpacity = (data.backgroundOpacity <= 0f || data.backgroundOpacity > 1f) ? backgroundOpacity
                         : data.backgroundOpacity;
-                copyCommandWithSlash = data.copyCommandWithSlash;
 
                 totalVolume = data.totalVolume;
                 netProfit = data.netProfit;
@@ -136,8 +117,6 @@ public class CasinoConfig {
                     playerTotalWagered = data.playerTotalWagered;
                 if (data.playerNetProfit != null)
                     playerNetProfit = data.playerNetProfit;
-                if (data.multipliers != null && !data.multipliers.isEmpty())
-                    multipliers = new java.util.ArrayList<>(data.multipliers);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -149,31 +128,25 @@ public class CasinoConfig {
         int x, y;
         float scale;
         boolean hudVisible;
-        String donutApiKey;
         String dashboardApiKey;
-        String apiKey; // Legacy field for migration
         float backgroundOpacity;
-        boolean copyCommandWithSlash;
         boolean soundEnabled;
         double minBet, maxBet;
         double totalVolume, netProfit;
         int wins, losses;
         Map<String, Double> playerTotalWagered;
         Map<String, Double> playerNetProfit;
-        java.util.List<Integer> multipliers;
 
-        public ConfigData(int x, int y, float scale, boolean hudVisible, String donutApiKey, String dashboardApiKey,
-                float backgroundOpacity, boolean copyCommandWithSlash, boolean soundEnabled, double minBet, double maxBet, double totalVolume,
+        public ConfigData(int x, int y, float scale, boolean hudVisible, String dashboardApiKey,
+                float backgroundOpacity, boolean soundEnabled, double minBet, double maxBet, double totalVolume,
                 double netProfit, int wins, int losses, Map<String, Double> playerTotalWagered,
-                Map<String, Double> playerNetProfit, java.util.List<Integer> multipliers) {
+                Map<String, Double> playerNetProfit) {
             this.x = x;
             this.y = y;
             this.scale = scale;
             this.hudVisible = hudVisible;
-            this.donutApiKey = donutApiKey;
             this.dashboardApiKey = dashboardApiKey;
             this.backgroundOpacity = backgroundOpacity;
-            this.copyCommandWithSlash = copyCommandWithSlash;
             this.soundEnabled = soundEnabled;
             this.minBet = minBet;
             this.maxBet = maxBet;
@@ -183,7 +156,6 @@ public class CasinoConfig {
             this.losses = losses;
             this.playerTotalWagered = playerTotalWagered;
             this.playerNetProfit = playerNetProfit;
-            this.multipliers = multipliers;
         }
     }
 

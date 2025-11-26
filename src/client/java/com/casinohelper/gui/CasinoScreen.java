@@ -105,96 +105,43 @@ public class CasinoScreen extends Screen {
             int btnY = (int) (rowY + (37 * scale));
             int btnHeight = (int) (16 * scale);
 
-            if (p.isSelectingMultiplier) {
-                // Dynamic Multiplier Grid
-                int btnW = (int) (30 * scale);
-                int btnH = (int) (14 * scale);
-                int spacing = (int) (3 * scale);
+            int btnW = (int) (35 * scale);
+            int rightAlignX = (int) (startX + (PANEL_WIDTH * scale) - (10 * scale));
 
-                // Start from the right side
-                int rightEdge = (int) (startX + (PANEL_WIDTH * scale) - (10 * scale));
+            // Lose Button (Right Aligned)
+            this.addDrawableChild(
+                    new ColoredButton(rightAlignX - btnW, btnY, btnW, btnHeight, Text.literal("Lose"), (button) -> {
+                        handleLose(index);
+                        refreshButtons();
+                    }, 0xFFAA0000, 0xFFFF5555));
 
-                // Calculate grid layout
-                int count = CasinoConfig.multipliers.size();
-                int cols = 3; // Max buttons per row
-                int rows = (int) Math.ceil((double) count / cols);
+            // Win Button (Left of Lose) - Opens multiplier input screen
+            this.addDrawableChild(new ColoredButton(rightAlignX - btnW - (int) (3 * scale) - btnW, btnY, btnW,
+                    btnHeight, Text.literal("Win"), (button) -> {
+                        if (this.client != null) {
+                            this.client.setScreen(new MultiplierInputScreen(this, p, (multiplier) -> {
+                                handleWin(p, multiplier);
+                            }));
+                        }
+                    }, 0xFF00AA00, 0xFF55FF55));
 
-                // Adjust starting X based on columns in first row (usually full)
-                int startBtnX = rightEdge - (cols * btnW + (cols - 1) * spacing);
+            // Donation Button (Purple) - Left of Win
+            int donateW = (int) (18 * scale);
+            this.addDrawableChild(new ColoredButton(
+                    rightAlignX - btnW - (int) (3 * scale) - btnW - (int) (3 * scale) - donateW, btnY,
+                    donateW, btnHeight, Text.literal("$"), (button) -> {
+                        handleDonation(p);
+                    }, 0xFF8800AA, 0xFFAA55FF));
 
-                // Adjust Y to center vertically in the box
-                int totalGridHeight = rows * btnH + (rows - 1) * spacing;
-                int gridStartY = rowY + (ROW_HEIGHT * (int) scale - totalGridHeight) / 2;
-
-                int currentX = startBtnX;
-                int currentY = gridStartY;
-                int colIndex = 0;
-
-                for (int m : CasinoConfig.multipliers) {
-                    this.addDrawableChild(
-                            new ColoredButton(currentX, currentY, btnW, btnH, Text.literal(m + "x"), (button) -> {
-                                // Direct Win - No Confirmation
-                                handleWin(p, m);
-                            }, 0xFF555555, 0xFF777777));
-
-                    colIndex++;
-                    currentX += btnW + spacing;
-                    if (colIndex >= cols) {
-                        colIndex = 0;
-                        currentX = startBtnX;
-                        currentY += btnH + spacing;
-                    }
-                }
-
-                // Cancel Button (X) - Red - Always at the end or new row
-                // If last row is full, new row. If not, append.
-                if (colIndex >= cols) {
-                    colIndex = 0;
-                    currentX = startBtnX;
-                    currentY += btnH + spacing;
-                }
-
-                this.addDrawableChild(new ColoredButton(currentX, currentY, btnW, btnH, Text.literal("X"), (button) -> {
-                    p.isSelectingMultiplier = false;
-                    refreshButtons();
-                }, 0xFFAA0000, 0xFFFF5555));
-
-            } else {
-                int btnW = (int) (35 * scale);
-                int rightAlignX = (int) (startX + (PANEL_WIDTH * scale) - (10 * scale));
-
-                // Lose Button (Right Aligned)
-                this.addDrawableChild(
-                        new ColoredButton(rightAlignX - btnW, btnY, btnW, btnHeight, Text.literal("Lose"), (button) -> {
-                            handleLose(index);
-                            refreshButtons();
-                        }, 0xFFAA0000, 0xFFFF5555));
-
-                // Win Button (Left of Lose)
-                this.addDrawableChild(new ColoredButton(rightAlignX - btnW - (int) (3 * scale) - btnW, btnY, btnW,
-                        btnHeight, Text.literal("Win"), (button) -> {
-                            p.isSelectingMultiplier = true;
-                            refreshButtons();
-                        }, 0xFF00AA00, 0xFF55FF55));
-
-                // Donation Button (Purple) - Left of Win
-                int donateW = (int) (18 * scale);
-                this.addDrawableChild(new ColoredButton(
-                        rightAlignX - btnW - (int) (3 * scale) - btnW - (int) (3 * scale) - donateW, btnY,
-                        donateW, btnHeight, Text.literal("$"), (button) -> {
-                            handleDonation(p);
-                        }, 0xFF8800AA, 0xFFAA55FF));
-
-                // Cancel Trade Button (Small X) - Left of Donation
-                int cancelTradeW = (int) (18 * scale);
-                this.addDrawableChild(new ColoredButton(
-                        rightAlignX - btnW - (int) (3 * scale) - btnW - (int) (3 * scale) - donateW - (int) (3 * scale)
-                                - cancelTradeW,
-                        btnY,
-                        cancelTradeW, btnHeight, Text.literal("X"), (button) -> {
-                            handleWin(p, 1); // 1x logic is refund/cancel
-                        }, 0xFFFFAA00, 0xFFFFDD55));
-            }
+            // Cancel Trade Button (Small X) - Left of Donation
+            int cancelTradeW = (int) (18 * scale);
+            this.addDrawableChild(new ColoredButton(
+                    rightAlignX - btnW - (int) (3 * scale) - btnW - (int) (3 * scale) - donateW - (int) (3 * scale)
+                            - cancelTradeW,
+                    btnY,
+                    cancelTradeW, btnHeight, Text.literal("X"), (button) -> {
+                        handleWin(p, 1); // 1x logic is refund/cancel
+                    }, 0xFFFFAA00, 0xFFFFDD55));
         }
 
         // Website Button at the bottom (Left Corner, Small Symbol)
@@ -305,8 +252,9 @@ public class CasinoScreen extends Screen {
             checkQueue();
         };
 
+        // Open chat directly with the command prefilled (user just needs to press Enter)
         if (this.client != null) {
-            this.client.setScreen(new CommandPopupScreen(this, command));
+            this.client.setScreen(new net.minecraft.client.gui.screen.ChatScreen("/" + command));
         }
     }
 
@@ -574,23 +522,20 @@ public class CasinoScreen extends Screen {
                     Text.literal("Total: " + CurrencyHelper.formatAmount(totalWagered)),
                     (int) (textStartX * invTextScale), (int) (totalY * invTextScale), 0xAAAAAA);
 
-            // Only show Wallet and Win/Loss when not in button selection mode
-            if (!player.isSelectingMultiplier && player.confirmingMultiplier == 0) {
-                // Wallet (from API) - on the right side
-                if (player.stats != null) {
-                    String wallet = CurrencyHelper.formatAmount(CurrencyHelper.parseAmount(player.stats.money));
-                    context.drawTextWithShadow(client.textRenderer, Text.literal("Wallet: " + wallet),
-                            (int) (115 / 0.8f), (int) ((rowY + 5) / 0.8f), 0x00FFFF);
-                }
-
-                // Win/Loss (Player PnL) - on the right side
-                double pnl = CasinoConfig.getPlayerProfit(player.name);
-                String pnlStr = CurrencyHelper.formatAmount(pnl);
-                String pnlPrefix = pnl >= 0 ? "+" : "";
-                int pnlColor = pnl >= 0 ? 0x00FF00 : 0xFF0000;
-                context.drawTextWithShadow(client.textRenderer, Text.literal("W/L: " + pnlPrefix + pnlStr),
-                        (int) (115 / 0.8f), (int) ((rowY + 16) / 0.8f), pnlColor);
+            // Wallet (from API) - on the right side
+            if (player.stats != null) {
+                String wallet = CurrencyHelper.formatAmount(CurrencyHelper.parseAmount(player.stats.money));
+                context.drawTextWithShadow(client.textRenderer, Text.literal("Wallet: " + wallet),
+                        (int) (115 / 0.8f), (int) ((rowY + 5) / 0.8f), 0x00FFFF);
             }
+
+            // Win/Loss (Player PnL) - on the right side
+            double pnl = CasinoConfig.getPlayerProfit(player.name);
+            String pnlStr = CurrencyHelper.formatAmount(pnl);
+            String pnlPrefix = pnl >= 0 ? "+" : "";
+            int pnlColor = pnl >= 0 ? 0x00FF00 : 0xFF0000;
+            context.drawTextWithShadow(client.textRenderer, Text.literal("W/L: " + pnlPrefix + pnlStr),
+                    (int) (115 / 0.8f), (int) ((rowY + 16) / 0.8f), pnlColor);
 
             context.getMatrices().pop();
             context.getMatrices().pop();
@@ -782,21 +727,6 @@ public class CasinoScreen extends Screen {
             }
             return true;
         }
-        // Escape should back out of multiplier/confirm state instead of closing the UI
-        if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
-            boolean reset = false;
-            for (PlayerData p : players) {
-                if (p.isSelectingMultiplier || p.confirmingMultiplier > 0) {
-                    p.isSelectingMultiplier = false;
-                    p.confirmingMultiplier = 0;
-                    reset = true;
-                }
-            }
-            if (reset) {
-                refreshButtons();
-                return true;
-            }
-        }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -847,11 +777,9 @@ public class CasinoScreen extends Screen {
         public String total;
         public String txId;
         public DonutSMPApi.Stats stats;
-        public boolean isSelectingMultiplier = false;
-        public int confirmingMultiplier = 0;
         public float slideAnimation = 0.0f;
         public net.minecraft.util.Identifier headTexture = null;
-        public boolean loadingSkin = false; // NEW
+        public boolean loadingSkin = false;
 
         public PlayerData(String name, String bet, String total, String txId) {
             this.name = name;

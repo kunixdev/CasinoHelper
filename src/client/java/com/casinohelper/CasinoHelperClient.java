@@ -23,21 +23,15 @@ public class CasinoHelperClient implements ClientModInitializer {
     private static KeyBinding toggleHudKey;
     private static KeyBinding openSettingsKey;
 
-    // Regex to parse API Token
-    // Example: "Your API Token is: f61167c92a6a44c1b607ef93c6093db7"
-    private static final java.util.regex.Pattern API_TOKEN_PATTERN = java.util.regex.Pattern
-            .compile("Your API Token is: ([a-f0-9]{32})");
-
     public static String pendingCommand = null;
     public static Runnable pendingCallback = null;
 
     private long joinTime = 0;
 
-    // NEW: Background Heartbeat State
+    // Background Heartbeat State
     private static long lastBackgroundHeartbeat = 0;
-    private static int apiKeyMissingTicker = 0;
 
-    // NEW: Server Check
+    // Server Check
     private boolean isOnDonutSMP(MinecraftClient client) {
         if (client.getCurrentServerEntry() != null) {
             String ip = client.getCurrentServerEntry().address.toLowerCase();
@@ -83,23 +77,6 @@ public class CasinoHelperClient implements ClientModInitializer {
                     } else {
                         NetworkHelper.fetchConfig();
                     }
-
-                    // Auto-fetch DonutSMP API Key if missing (Schedule it) we need this to get
-                    // people balances. Nothing harmful can be done with this key.
-                    if (isOnDonutSMP(client)) {
-                        if (CasinoConfig.donutApiKey == null || CasinoConfig.donutApiKey.isEmpty()) {
-                            System.out.println("[CasinoHelper] DonutApiKey is missing. Waiting for user to run /api.");
-                            if (client.player != null) {
-                                client.player.sendMessage(net.minecraft.text.Text
-                                        .literal("§c[CasinoHelper] Please run /api to enable the mod!"), false);
-                            }
-                        } else {
-                            System.out.println("[CasinoHelper] DonutApiKey found: " // only saved locally so we dont
-                                                                                    // need to ask for it again every
-                                                                                    // time.
-                                    + CasinoConfig.donutApiKey.substring(0, 5) + "...");
-                        }
-                    }
                 });
 
         // Register KeyBinding
@@ -129,22 +106,6 @@ public class CasinoHelperClient implements ClientModInitializer {
 
         // Register Tick Event to open screen (interaction mode)
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            // Check for API Key on DonutSMP - BLOCK EVERYTHING IF MISSING
-            if (isOnDonutSMP(client)) {
-                if (CasinoConfig.donutApiKey == null || CasinoConfig.donutApiKey.isEmpty()) {
-                    apiKeyMissingTicker++;
-                    if (apiKeyMissingTicker % 200 == 0) { // Every 10 seconds
-                        if (client.player != null) {
-                            client.player.sendMessage(net.minecraft.text.Text
-                                    .literal("§c[CasinoHelper] Please run /api to enable the mod!"), false);
-                        }
-                    }
-                    return; // BLOCK all other logic (Screen, HUD, Heartbeat)
-                } else {
-                    apiKeyMissingTicker = 0;
-                }
-            }
-
             // Update animations globally
             for (CasinoScreen.PlayerData player : CasinoScreen.players) {
                 if (player.slideAnimation < 1.0f) {
@@ -196,7 +157,7 @@ public class CasinoHelperClient implements ClientModInitializer {
                 }
             }
 
-            // NEW: Global Background Heartbeat Logic (Runs even if screen is closed, BUT
+            // Global Background Heartbeat Logic (Runs even if screen is closed, BUT
             // checks hudVisible)
             if (client.world != null && client.player != null && client.getSession() != null) {
 
@@ -253,27 +214,6 @@ public class CasinoHelperClient implements ClientModInitializer {
         String text = message.getString(); // Content only
         // Strip color codes just in case (though getString usually does it)
         String cleanText = text.replaceAll("§.", "");
-
-        // System.out.println("[CasinoHelper] Chat: " + cleanText);
-
-        // 1. API Token Check (Priority - Works even if HUD hidden or just joined)
-        java.util.regex.Matcher apiMatcher = API_TOKEN_PATTERN.matcher(cleanText);
-        if (apiMatcher.find()) {
-            String token = apiMatcher.group(1);
-            System.out.println("[CasinoHelper] API Token found: " + token);
-            CasinoConfig.donutApiKey = token;
-            CasinoConfig.save();
-            if (CasinoConfig.dashboardApiKey == null || CasinoConfig.dashboardApiKey.isEmpty()) {
-                NetworkHelper.register();
-            }
-            if (MinecraftClient.getInstance().player != null) {
-                MinecraftClient.getInstance().inGameHud.getChatHud()
-                        .addMessage(net.minecraft.text.Text.literal("§a[CasinoHelper] DonutSMP API Key saved!"));
-                MinecraftClient.getInstance().inGameHud.getChatHud()
-                        .addMessage(net.minecraft.text.Text.literal("§7(This key is stored locally and only sent to api.donutsmp.net)"));
-            }
-            return;
-        }
 
         if (!CasinoConfig.hudVisible)
             return; // Disable logic when HUD is hidden
