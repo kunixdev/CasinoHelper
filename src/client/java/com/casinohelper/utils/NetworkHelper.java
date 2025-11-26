@@ -360,6 +360,73 @@ public class NetworkHelper {
         });
     }
 
+    public static void splitBet(String originalTxId, List<Double> splits, Consumer<List<String>> onSuccess, Runnable onError) {
+        executor.submit(() -> {
+            try {
+                JsonObject json = new JsonObject();
+                json.addProperty("original_tx_id", originalTxId);
+                json.add("splits", gson.toJsonTree(splits));
+
+                String apiKey = com.casinohelper.config.CasinoConfig.dashboardApiKey;
+                String signature = "";
+                String player = net.minecraft.client.MinecraftClient.getInstance().getSession().getUsername();
+                String timestamp = String.valueOf(System.currentTimeMillis() / 1000L);
+                String nonce = java.util.UUID.randomUUID().toString();
+
+                if (apiKey != null && !apiKey.isEmpty()) {
+                    String payload = json.toString() + "." + timestamp + "." + nonce;
+                    signature = calculateHmac(payload, apiKey);
+                }
+
+                HttpRequest.Builder builder = HttpRequest.newBuilder()
+                        .uri(URI.create(BASE_URL + "/split_bet"))
+                        .header("Content-Type", "application/json");
+
+                if (!signature.isEmpty()) {
+                    builder.header("X-Signature", signature);
+                    builder.header("X-Player", player);
+                    builder.header("X-Timestamp", timestamp);
+                    builder.header("X-Nonce", nonce);
+                }
+
+                HttpRequest request = builder
+                        .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
+                        .build();
+
+                client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                        .thenAccept(response -> {
+                            if (response.statusCode() == 200) {
+                                try {
+                                    JsonObject resp = gson.fromJson(response.body(), JsonObject.class);
+                                    if (resp.has("status") && "split".equals(resp.get("status").getAsString())) {
+                                        List<String> txIds = new java.util.ArrayList<>();
+                                        resp.get("tx_ids").getAsJsonArray().forEach(e -> txIds.add(e.getAsString()));
+                                        onSuccess.accept(txIds);
+                                    } else {
+                                        System.out.println("[CasinoHelper] Split failed: unexpected response");
+                                        if (onError != null) onError.run();
+                                    }
+                                } catch (Exception e) {
+                                    System.out.println("[CasinoHelper] Split failed: " + e.getMessage());
+                                    if (onError != null) onError.run();
+                                }
+                            } else {
+                                System.out.println("[CasinoHelper] Split API error: " + response.statusCode() + " - " + response.body());
+                                if (onError != null) onError.run();
+                            }
+                        })
+                        .exceptionally(e -> {
+                            System.out.println("[CasinoHelper] Split request failed: " + e.getMessage());
+                            if (onError != null) onError.run();
+                            return null;
+                        });
+            } catch (Exception e) {
+                e.printStackTrace();
+                if (onError != null) onError.run();
+            }
+        });
+    }
+
     public static void sendChatEvent(String text) {
         executor.submit(() -> {
             try {
@@ -431,28 +498,101 @@ public class NetworkHelper {
                                             return; // Stop processing
                                         }
 
-                                        double actualAmount = amount;
-                                        String actualDisplayAmount = displayAmount;
-
-                                        // 2. Check for Over-Max (Cap at Max, rest is donation)
+                                        // 2. Check for Over-Max (Split Logic)
                                         if (amount > maxBet) {
-                                            double excess = amount - maxBet;
-                                            actualAmount = maxBet;
-                                            actualDisplayAmount = CurrencyHelper.formatAmount(maxBet);
-
                                             if (net.minecraft.client.MinecraftClient.getInstance().player != null) {
                                                 net.minecraft.client.MinecraftClient.getInstance().inGameHud
                                                         .getChatHud()
                                                         .addMessage(net.minecraft.text.Text
-                                                                .literal("§d[Casino] Bet capped at max ("
-                                                                        + actualDisplayAmount + "). Excess "
-                                                                        + CurrencyHelper.formatAmount(excess)
-                                                                        + " accepted as donation from " + pName));
+                                                                .literal("§d[Casino] Splitting bet from " + pName
+                                                                        + " (" + displayAmount + ") into max chunks of "
+                                                                        + CurrencyHelper.formatAmount(maxBet)));
                                             }
 
-                                            // Add excess to netProfit immediately as it's a donation
-                                            com.casinohelper.config.CasinoConfig.netProfit += excess;
+                                            List<Double> splits = new java.util.ArrayList<>();
+                                            double remaining = amount;
+                                            while (remaining > 0.01) {
+                                                double chunk = Math.min(remaining, maxBet);
+                                                splits.add(chunk);
+                                                remaining -= chunk;
+                                            }
+
+                                            // Store final references for lambda
+                                            final String finalPName = pName;
+                                            final String finalTxId = txId;
+                                            final double finalAmount = amount;
+                                            final String finalDisplayAmount = displayAmount;
+
+                                            splitBet(txId, splits, (newTxIds) -> {
+                                                // Success - add split bets
+                                                net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                                                    for (int i = 0; i < splits.size(); i++) {
+                                                        double splitAmount = splits.get(i);
+                                                        String splitTxId = newTxIds.get(i);
+                                                        String splitDisplay = CurrencyHelper.formatAmount(splitAmount);
+
+                                                        // Update Config Stats
+                                                        com.casinohelper.config.CasinoConfig.totalVolume += splitAmount;
+                                                        com.casinohelper.config.CasinoConfig.netProfit += splitAmount;
+                                                        com.casinohelper.config.CasinoConfig.addPlayerWager(finalPName,
+                                                                splitAmount);
+
+                                                        CasinoScreen.PlayerData newData = new CasinoScreen.PlayerData(
+                                                                finalPName,
+                                                                splitDisplay, splitDisplay, splitTxId);
+
+                                                        if (CasinoScreen.players.size() < 2) {
+                                                            CasinoScreen.players.add(newData);
+                                                        } else {
+                                                            CasinoScreen.queue.add(newData);
+                                                        }
+
+                                                        // Fetch Stats just once per player
+                                                        if (i == 0) {
+                                                            DonutSMPApi.getPlayerStats(finalPName).thenAccept(stats -> {
+                                                                newData.stats = stats;
+                                                            });
+                                                        }
+                                                    }
+                                                    CasinoScreen.triggerRefresh();
+                                                });
+                                            }, () -> {
+                                                // Error fallback - add as single bet with original amount
+                                                net.minecraft.client.MinecraftClient.getInstance().execute(() -> {
+                                                    if (net.minecraft.client.MinecraftClient.getInstance().player != null) {
+                                                        net.minecraft.client.MinecraftClient.getInstance().inGameHud
+                                                                .getChatHud()
+                                                                .addMessage(net.minecraft.text.Text
+                                                                        .literal("§c[Casino] Split failed, adding as single bet"));
+                                                    }
+
+                                                    // Update Config Stats
+                                                    com.casinohelper.config.CasinoConfig.totalVolume += finalAmount;
+                                                    com.casinohelper.config.CasinoConfig.netProfit += finalAmount;
+                                                    com.casinohelper.config.CasinoConfig.addPlayerWager(finalPName, finalAmount);
+
+                                                    CasinoScreen.PlayerData newData = new CasinoScreen.PlayerData(
+                                                            finalPName,
+                                                            finalDisplayAmount, finalDisplayAmount, finalTxId);
+
+                                                    if (CasinoScreen.players.size() < 2) {
+                                                        CasinoScreen.players.add(newData);
+                                                    } else {
+                                                        CasinoScreen.queue.add(newData);
+                                                    }
+
+                                                    DonutSMPApi.getPlayerStats(finalPName).thenAccept(stats -> {
+                                                        newData.stats = stats;
+                                                    });
+
+                                                    CasinoScreen.triggerRefresh();
+                                                });
+                                            });
+                                            return;
                                         }
+
+                                        double actualAmount = amount;
+                                        String actualDisplayAmount = displayAmount;
 
                                         // Update Config Stats
                                         // Volume: Only the actual bet counts towards volume
